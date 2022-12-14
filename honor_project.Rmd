@@ -1,0 +1,304 @@
+---
+title: "Honor Project"
+author: "Keting Chen"
+date: "2022-11-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE,
+                      error = TRUE, fig.height = 4, cache=TRUE)
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(DescTools)
+setwd("~/Documents/College/Junior1/Stat240/data_project")
+```
+
+## R Markdown
+
+Read in the data:
+
+```{r cars}
+# df = read_csv("wildfiredb.csv")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+# df = df %>% drop_na() %>%
+#   filter()
+```
+
+
+
+```{r}
+years = read.table(text="count year
+524076 2018
+475146 2017
+237025 2016
+344148 2015
+250953 2014
+280374 2013
+255487 2012",head=T)
+ggplot(years,aes(x=year,y=count))+geom_col()
+```
+
+
+```{r,fig.width=8,fig.height=12}
+months = read.table(text="count year month
+10156 2018 12
+56716 2018 11
+18999 2018 10
+51681 2018 09
+225445 2018 08
+95870 2018 07
+15749 2018 06
+7777 2018 05
+10039 2018 04
+6858 2018 03
+14908 2018 02
+9878 2018 01
+69845 2017 12
+15179 2017 11
+85514 2017 10
+97875 2017 09
+104346 2017 08
+54047 2017 07
+12487 2017 06
+10359 2017 05
+9557 2017 04
+9331 2017 03
+3616 2017 02
+2990 2017 01
+5479 2016 12
+20930 2016 11
+16021 2016 10
+39468 2016 09
+68705 2016 08
+29365 2016 07
+22655 2016 06
+6936 2016 05
+8786 2016 04
+7370 2016 03
+8478 2016 02
+2832 2016 01
+7921 2015 12
+19630 2015 11
+13942 2015 10
+58777 2015 09
+159177 2015 08
+16246 2015 07
+28246 2015 06
+5104 2015 05
+9239 2015 04
+9613 2015 03
+9406 2015 02
+6847 2015 01
+5061 2014 12
+8222 2014 11
+13167 2014 10
+73456 2014 09
+82736 2014 08
+15274 2014 07
+8165 2014 06
+10168 2014 05
+7475 2014 04
+8907 2014 03
+9113 2014 02
+9209 2014 01
+11173 2013 12
+12509 2013 11
+14660 2013 10
+41837 2013 09
+124887 2013 08
+19318 2013 07
+12294 2013 06
+14393 2013 05
+7989 2013 04
+7702 2013 03
+8861 2013 02
+4751 2013 01
+4335 2012 12
+11863 2012 11
+10191 2012 10
+24689 2012 09
+150172 2012 08
+16728 2012 07
+9825 2012 06
+7518 2012 05
+5599 2012 04
+5401 2012 03
+6713 2012 02
+2453 2012 01",head=T,colClasses=c("numeric","numeric","character"))
+ggplot(months,aes(x=month,y=count))+geom_col()+facet_grid(vars(year),scales = "free_y")
+```
+
+
+Select 2018 only
+```{r}
+options(width = 120)
+fires2016 = read_csv("wildfiredb_2016_sorted.csv")
+spec(fires2016)
+head(fires2016)
+```
+
+
+Remove same
+```{r}
+fires2016 = fires2016 %>%
+  mutate(acq_date = ymd(acq_date))
+identical = fires2016 %>%
+  distinct(Polygon_ID, .keep_all=TRUE)
+frp_summary = identical %>%
+  summarise(frp_mean = mean(frp), 
+            frp_sd = sd(frp), 
+            frp_max = max(frp),
+            frp_min = min(frp),
+            frp_median = median(frp))
+frp_summary
+```
+
+Visualize frp in a year
+```{r}
+plt1 = ggplot(identical, aes(x=acq_date, y=frp)) +
+  geom_col()
+plt1
+```
+We can find most fire in summer. But there's a big fire in winter.
+
+Find out the areas in one day
+If fires are in the neighbors, then they are the same area fire
+Algorithm pseudo-code:
+
+lists = [[]] // this is all on-fire locations and their neighbors
+locations = 1 // this is the on-fire locations per day
+for fire in fires_in_one_day:
+  lists.add(fire)
+  lists.add(fire.neighbors)
+for fire in fires_in_one_day:
+  if lists has this fire:
+    merge these two on-fire lists
+    Add this fire's frp to the first value in the corresponding list
+  else:
+    locations += 1
+
+```{r}
+frp_only = fires2016 %>%
+  select(Polygon_ID, acq_date, frp, Neighbour)
+```
+
+
+Next, draw a three-dimension graph: x is date, y is fire location in one day, z is the frp of the sum of the frp in one on-fire location in the day
+
+
+We might also draw a graph on the map
+
+
+
+```{r}
+options(width=120)
+
+firecols = tibble(name=names(fires2016))
+
+firecols %>% mutate(neighbor = str_detect(name,"(n|N)eighbou?r")*1,
+                    variable = str_replace_all(name,"((n|N)eighbou?r_?)|(20[0-2][0-9].*)",""),
+                    year = str_extract(name,"20[0-2][0-9]"),
+                    stat = str_extract(name,"_(max|min|median|sum|mode|count|mean)$")%>%str_sub(2,4)%>%str_to_title) %>%
+  group_by(neighbor,variable,year) %>% 
+  summarise(stat = stat%>%(.%>%sort%>%str_c(collapse=""))) %>% filter(!is.na(year)) %>% ungroup %>% arrange(year)-> firecols.summary
+
+firecols.summary %>% filter(neighbor==0) %>% pivot_wider(names_from = year, values_from = stat)
+firecols.summary %>% filter(neighbor==1) %>% pivot_wider(names_from = year, values_from = stat)
+
+```
+
+
+FVT
+EVT
+FCCS
+
+```{r}
+fires2016 %>% select(contains("FVT")|contains("EVT")|contains("FCCS")) %>% View
+```
+
+
+start here
+```{r}
+fires = fires2016 %>%
+  select(!contains("2012"))
+cbc_fccs_2014 = fires %>%
+  select(matches("CBC2014|FCCS2014"))
+fires = fires %>%
+  select(!contains("2014"))
+fires = cbind(fires, cbc_fccs_2014)
+print(names(fires))
+```
+
+filter means and modes
+to characters
+```{r}
+modes = fires %>%
+  select(matches("FVT.*mode|EVT.*mode|FCCS.*mode")) %>%
+  select(matches("mode"))
+means = fires %>%
+  select(!matches("FVT|EVT|FCCS")) %>%
+  select(matches("mean"))
+first_three = fires[, 1:4]
+fire_clean = cbind(first_three, means) %>%
+  cbind(modes)
+cols = names(modes)
+fire_clean = fire_clean %>%
+  mutate_at(cols, as.character()) %>%
+  mutate_at("Polygon_ID", as.character()) %>%
+  mutate_at("Neighbour", as.character())
+head(fire_clean)
+```
+
+Group by Neighbour, Polygon, and acq_date
+```{r}
+Mode <- function(x, na.rm = FALSE) {
+  if(na.rm){
+    x = x[!is.na(x)]
+  }
+
+  ux <- unique(x)
+  return(ux[which.max(tabulate(match(x, ux)))])
+}
+mean_cols = names(means)
+mode_cols = names(modes)
+fire_summary = fire_clean %>%
+  group_by(Neighbour, Polygon_ID, acq_date) %>%
+  mutate_at(mean_cols, mean) %>%
+  mutate_at(mode_cols, Mode) %>%
+  ungroup() %>%
+  distinct()
+```
+
+Instead, I think we need to group by only Polygon and acq_date
+```{r}
+mean_cols = names(means)
+mode_cols = names(modes)
+fire_summary2 = fire_clean %>%
+  group_by(Polygon_ID, acq_date) %>%
+  mutate_at(mean_cols, mean) %>%
+  mutate_at(mode_cols, Mode) %>%
+  ungroup() %>%
+  distinct_at(vars(-Neighbour))
+```
+
+```{r}
+write_csv(fire_summary, "wildfire_2016_cleaned.csv")
+write_csv(fire_summary, "wildfire_2016_cleaned_no_neighbor.csv")
+```
+
+1. convert modes to chars
+2. put all to multiple regression model
+3. explore columns (basic plots)
+4. generate a summary table, r-square, confidence intervals, residual plots
+Basic analysis
+```{r}
+
+```
