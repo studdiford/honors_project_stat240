@@ -1,0 +1,257 @@
+---
+title: "Fires_honors_rd"
+output: html_document
+date: "2023-02-25"
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE) 
+
+library(tidyverse)
+library(lubridate)
+library(broman)
+source("../scripts/viridis.R")
+source("../scripts/ggprob.R")
+library()
+require(ggiraph)
+require(ggiraphExtra)
+require(plyr)
+```
+
+# Introduction
+Wildfires have become an increasingly pressing issue in California, with devastating consequences for both the state's natural environment and its residents. In recent years, wildfires have grown larger and more destructive, and the fire season has extended significantly. Understanding the factors that contribute to these wildfires is critical for developing effective prevention and management strategies, especially as their impact along the wildland-urban interface continues to worsen. 
+
+In this project, we will analyze data on wildfires in California, drawing on information from WildfireDB, a dataset created by a joint group of researchers at Vanderbilt, UC Riverside, and Stanford Universities. Our goal is to gain insights into the causes and patterns of wildfires in the state, and to identify key factors that influence their occurrence and severity. By multiple linear regression and general statistical analysis to these data, we aim to develop a predictive model that can help predict the likelihood and severity of future wildfires.
+
+# Background
+The state of California has been experiencing devastating wildfires in recent years, which have caused significant damage to homes, businesses, and the environment. The 2020 wildfire season in California was particularly destructive, with more than 9,900 fires burning over 4.3 million acres, resulting in 33 fatalities and over 10,000 structures destroyed.
+
+The increase in wildfires in California has been linked to various factors, including climate change, human activity, and forest management practices. The need to understand the causes and effects of wildfires in California is crucial in developing effective strategies to prevent and mitigate their impact.
+
+To this end, data science can play a significant role in analyzing the factors that contribute to wildfires in California and predicting their behavior. WildfireDB compiles data from a variety of sources and organizations, creating a truly holistic model for analysis of wildfire risk factors. With high spatial and temporal resolution (each unit represents a 375 square meter polygon and 1 day of time) the model achieves a degree of granularity that allows for detailed analysis across regions and over time. 
+
+# Data
+
+The dataset incorporates information from a set of private and public organizations. The LANDFIRE website was used to gather raw data on vegetation, fuel type, and topography. Daily measures of fire intensity and spread come from the VIIRS(Visible Infared Imaging Radiometer Suite) database, which provides resolution up to the previously stated 375 square meter metric. Additionaly, weather data was sourced from NOAA(National Oceanic and Atmospheric Administration).
+
+Each datapoint in the dataset represents a specific polygon in time, and contains features on a neighboring polygon as well. Specific features include:
+
+- FRP(Fire radiative power): A measure of average radiant energy released across a given day
+- Average elevation of the polygon
+- Average slope of the polygon
+- Average, minimum, and maximum temperature
+- Total precipitation in a day
+- Average atmospheric pressure
+- Relative wind speed(between a polygon and its neighbor)
+
+Additional features include the maximum, minimum, median, mode, sum, and count for:
+- Canopy Base Density
+- Canopy Cover
+- Canopy Height
+- Existing Vegetation Cover
+- Existing Vegetation Height
+- Existing Vegetation Type
+
+In this analysis, qualitative features(Existing Vegatation Type), were combined with majority quantitative features to yield data more suitable for linear regression. Datapoints were taken from 2018 and were grouped by polygon and date(neighbor values). 2018 was chosen as it was the last year data was reliably collected without impact from COVID-19. 2018 also had the most data collected compared to past years.
+
+```{r echo=FALSE}
+years = read.table(text="count year
+524076 2018
+475146 2017
+237025 2016
+344148 2015
+250953 2014
+280374 2013
+255487 2012",head=T)
+ggplot(years,aes(x=year,y=count))+geom_col()+
+  ggtitle("WildfireDB Data Quantities by Year")
+```
+
+For qualitative values related to vegetation type(indicated with a numerical code), the mode was taken of the mode in each group. For quantitative values, the mean was taken of the mean values in each group. This resulted in single number statistics for each polygon for the year of 2018. 
+
+# Analysis
+Exploratory plots reveal basic patterns in the data for the year 2018. A graph of FRP values across all years reveals a generally unimodal distribution centered in the summer months(July), with strong outliers in early winter(November/December).
+
+```{r,fig.width=8,fig.height=12, echo=FALSE}
+months = read.table(text="count year month
+10156 2018 12
+56716 2018 11
+18999 2018 10
+51681 2018 09
+225445 2018 08
+95870 2018 07
+15749 2018 06
+7777 2018 05
+10039 2018 04
+6858 2018 03
+14908 2018 02
+9878 2018 01
+69845 2017 12
+15179 2017 11
+85514 2017 10
+97875 2017 09
+104346 2017 08
+54047 2017 07
+12487 2017 06
+10359 2017 05
+9557 2017 04
+9331 2017 03
+3616 2017 02
+2990 2017 01
+5479 2016 12
+20930 2016 11
+16021 2016 10
+39468 2016 09
+68705 2016 08
+29365 2016 07
+22655 2016 06
+6936 2016 05
+8786 2016 04
+7370 2016 03
+8478 2016 02
+2832 2016 01
+7921 2015 12
+19630 2015 11
+13942 2015 10
+58777 2015 09
+159177 2015 08
+16246 2015 07
+28246 2015 06
+5104 2015 05
+9239 2015 04
+9613 2015 03
+9406 2015 02
+6847 2015 01
+5061 2014 12
+8222 2014 11
+13167 2014 10
+73456 2014 09
+82736 2014 08
+15274 2014 07
+8165 2014 06
+10168 2014 05
+7475 2014 04
+8907 2014 03
+9113 2014 02
+9209 2014 01
+11173 2013 12
+12509 2013 11
+14660 2013 10
+41837 2013 09
+124887 2013 08
+19318 2013 07
+12294 2013 06
+14393 2013 05
+7989 2013 04
+7702 2013 03
+8861 2013 02
+4751 2013 01
+4335 2012 12
+11863 2012 11
+10191 2012 10
+24689 2012 09
+150172 2012 08
+16728 2012 07
+9825 2012 06
+7518 2012 05
+5599 2012 04
+5401 2012 03
+6713 2012 02
+2453 2012 01",head=T,colClasses=c("numeric","numeric","character"))
+ggplot(months,aes(x=month,y=count))+geom_col()+facet_grid(vars(year),scales = "free_y")
+```
+
+In 2018 specifically, measures of FRP reveal a significant spike in fire intensity during these months.
+
+```{r echo=FALSE, results='hide',warning=FALSE,message=FALSE}
+options(width = 120)
+fires2016 = read_csv("../data/wildfiredb_2018_sorted.csv")
+spec(fires2016)
+head(fires2016)
+```
+
+
+```{r echo=FALSE, results='hide',warning=FALSE,message=FALSE}
+fires2016 = fires2016 %>%
+  mutate(acq_date = ymd(acq_date))
+identical = fires2016 %>%
+  distinct(Polygon_ID, .keep_all=TRUE)
+frp_summary = identical %>%
+  summarise(frp_mean = mean(frp), 
+            frp_sd = sd(frp), 
+            frp_max = max(frp),
+            frp_min = min(frp),
+            frp_median = median(frp))
+frp_summary
+```
+
+```{r echo=FALSE, results='hide',warning=FALSE,message=FALSE}
+plt1 = ggplot(identical, aes(x=acq_date, y=frp)) +
+  geom_col()
+plt1
+```
+
+Further analysis reveals further patterns in the data, such as higher FRP values in areas with more vegetative cover. This relationship has been graphed below. A general correlation can also be seen between Fuel Vegetation Height and FRP.
+
+```{r echo=FALSE, results='hide',warning=FALSE,message=FALSE}
+fire_summary2 = read_csv("wildfire_2016_cleaned.csv")
+
+
+
+fire_summary2%>%
+  select(frp)
+lr=lm(fire_summary2)
+summary(lr)
+coef(lr)
+
+
+  
+
+
+head(fire_summary2)
+
+
+plot1 = ggplot(fire_summary2, aes(x=FVC2016_mean, y=frp))+
+  geom_point()+
+  ggtitle(label="FRP in relation to Fuel Vegetation Cover", subtitle="Percentage of tile vegetation classified as fuel ")
+plot1
+```
+
+```{r echo=FALSE, results='hide',warning=FALSE,message=FALSE}
+plot2 = ggplot(fire_summary2, aes(x=FVH2016_mean, y=frp))+
+  geom_point()+
+  ggtitle(label="FRP in relation to Fuel Vegetation Height", subtitle = "Height of tile vegatation classified as fuel")
+plot2
+
+```
+
+Conducting a multiple linear regression on all 23 features in the compiled data can reveal further insights into wildfire occurence. A relatively linear Q-Q plot indicates that the data are not skewed, and normally distributed model residuals indicate that the model is generally a good fit for the data, as well as that the residuals are random and have constant independence. Conducting a t test on the data yields a t statistic of 40.11, and a p-value of 3.25*10^-200, indicating that we can reject the null hypothesis that there is no relationship between FRP and our 22 predictor variables. 
+
+```{r echo=FALSE, results='hide',warning=FALSE,message=FALSE}
+
+# Get the model residuals
+model_residuals = lr$residuals
+
+# Plot the result
+hist(model_residuals)
+
+# Plot the residuals
+qqnorm(model_residuals)
+# Plot the Q-Q line
+qqline(model_residuals)
+
+
+
+
+tstat <- coef(summary(lr))[2,1]/coef(summary(lr))[2,2]
+tstat
+
+2*pt(tstat, 896, lower.tail=FALSE)
+
+
+
+
+```
+
+# Discussion
+
